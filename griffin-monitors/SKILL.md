@@ -76,7 +76,7 @@ import {
   Assert,
   variable,
   WaitDuration,
-} from "@griffin-app/griffin-core";
+} from "@griffin-app/griffin";
 
 const monitor = createMonitorBuilder({
   name: "monitor-name",           // Unique, descriptive (e.g. "auth-login-check")
@@ -179,7 +179,7 @@ Keep each monitor focused on one flow. Split "login" and "checkout" into separat
 
 ## 6. Optional: notifications
 
-Use the **`notify`** builder from `@griffin-app/griffin-core` to add alerts. Pass a `notifications` array into `createMonitorBuilder({ ... })`. Each entry is built by choosing a trigger, optionally `.withCooldown(minutes)`, then a routing method. Omit `notifications` if the user does not need alerts.
+Use the **`notify`** builder from `@griffin-app/griffin` to add alerts. Pass a `notifications` array into `createMonitorBuilder({ ... })`. Each entry is built by choosing a trigger, optionally `.withCooldown(minutes)`, then a routing method. Omit `notifications` if the user does not need alerts.
 
 ### Triggers
 
@@ -198,7 +198,7 @@ Use the **`notify`** builder from `@griffin-app/griffin-core` to add alerts. Pas
 ### Example
 
 ```typescript
-import { createMonitorBuilder, GET, Json, Frequency, Assert, variable, notify } from "@griffin-app/griffin-core";
+import { createMonitorBuilder, GET, Json, Frequency, Assert, variable, notify } from "@griffin-app/griffin";
 
 const monitor = createMonitorBuilder({
   name: "health-check",
