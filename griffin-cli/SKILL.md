@@ -1,6 +1,6 @@
 ---
 name: griffin-cli
-description: Teaches LLM agents how to use the Griffin CLI to run, validate, and deploy API monitors; manage environments and variables; and interact with the hub. Use when the user wants to run monitors locally, preview or apply monitor changes, manage secrets or variables, check run history, or perform any griffin-cli workflow supporting Griffin monitors.
+description: Use Griffin CLI non-interactively with --json to validate/test monitors, plan/apply/destroy hub changes, manage env vars/secrets, and run two-step auth login. Trigger when users ask to run griffin commands or automate monitor workflows.
 ---
 
 # Griffin CLI
@@ -19,9 +19,88 @@ This skill teaches you how to use **griffin-cli** to support Griffin API monitor
 
 ---
 
-## 2. Command overview
+## 2. Agent execution contract (--json)
 
-Commands are either **top-level** or under a **group**. The default environment is `default` unless overridden with `--env <name>` where supported.
+When acting as an agent, follow these rules:
+
+- **MUST** run commands with `--json` (prefer global form: `griffin --json <command> ...`).
+- **MUST** parse exactly one JSON object from stdout on success and exactly one JSON object from stderr on error.
+- **MUST** include non-interactive bypass flags for commands that would otherwise prompt.
+- **MUST** use the auth two-step flow (`auth login --no-poll` then `auth login --poll`) in JSON mode.
+- **NEVER** run interactive `griffin auth login` (without `--no-poll` or `--poll`) in agent JSON workflows.
+
+All commands support a **global `--json`** flag. In JSON mode the CLI returns a **single JSON object** and disables prompts/spinners/human formatting.
+
+**How to pass --json:** Use the global option before the subcommand, e.g. `griffin --json status` or `griffin --json plan --env production`. Some commands also accept a local `--json`; either form enables JSON output.
+
+### 2.1 JSON envelope
+
+- **Success:** One JSON object on **stdout**, exit code 0.
+  ```json
+  { "ok": true, "command": "<command-name>", "data": { ... }, "messages": [{ "level": "info", "message": "..." }] }
+  ```
+  Parse `data` for the result. `messages` is optional (informational lines).
+
+- **Error:** One JSON object on **stderr**, exit code 1.
+  ```json
+  { "ok": false, "command": "<command-name>", "error": { "code": "ERROR_CODE", "message": "...", "details": ..., "hint": "..." } }
+  ```
+  Use `error.code` for programmatic handling. Common codes: `AUTH_FAILED`, `NOT_FOUND`, `INTERACTIVE_REQUIRED`, `NO_PENDING_AUTH`, `UNKNOWN_ERROR`.
+
+### 2.2 Non-interactive behavior
+
+In JSON mode, **prompts are disabled**. If a command would prompt (e.g. confirm apply, enter secret value), it returns `INTERACTIVE_REQUIRED`. You **MUST** supply the bypass flag:
+
+| Command / action | Bypass flag |
+|------------------|-------------|
+| `apply`          | `--auto-approve` |
+| `destroy`        | `--auto-approve` |
+| `secrets delete` | `--force` |
+| `secrets set`    | `--value <value>` (provide value on the command line; avoid for highly sensitive data) |
+| `integrations remove` | `--force` |
+| `notifications test`  | Provide `--integration` (and e.g. `--channel` or `--to-addresses` as needed) |
+
+Example (agent-safe apply):
+```bash
+griffin --json apply --env production --auto-approve
+```
+
+### 2.3 Auth login: two-step flow for agents
+
+`auth login` uses a **device authorization flow**. In an agent context you cannot open a browser or wait interactively in one process. Use the **two-step** flow:
+
+1. **Step 1 — Get auth URL and instruct the user:**  
+   Run:
+   ```bash
+   griffin --json auth login --no-poll
+   ```
+   - **Stdout** (success): `data` contains `authUrl`, `userCode`, and `message` (e.g. "Complete authorization in the browser, then run: griffin auth login --poll").
+   - The CLI does **not** open the browser in JSON mode. Present `authUrl` (or `userCode`) to the user and ask them to complete sign-in in their browser.
+
+2. **Step 2 — Complete login after user authorized:**  
+   After the user has finished authorizing in the browser, run:
+   ```bash
+   griffin --json auth login --poll
+   ```
+   - **Stdout** (success): `data` is `{ "success": true }`; credentials are saved to `~/.griffin/credentials.json`.
+   - If no pending auth exists: **stderr** error with code `NO_PENDING_AUTH` and a hint to run `griffin auth login --no-poll` first, then have the user authorize, then run `griffin auth login --poll`.
+
+**Summary for agents:** You **MUST** use `--no-poll` then `--poll` with `--json`. Never run `griffin auth login` without one of these flags in JSON mode; that path is interactive-only. For self-hosted hubs, use `griffin auth connect --url <url> --token <token>` instead (no browser).
+
+### 2.4 Troubleshooting (JSON mode)
+
+| Error code | Meaning | Required recovery |
+|------------|---------|-------------------|
+| `INTERACTIVE_REQUIRED` | Command requires prompt input | Re-run with the required non-interactive bypass flag (`--auto-approve`, `--force`, `--value`, etc.) |
+| `NO_PENDING_AUTH` | Tried `auth login --poll` with no prior device flow | Run `griffin --json auth login --no-poll`, have the user complete browser auth, then run `griffin --json auth login --poll` |
+| `AUTH_FAILED` | Credentials invalid/expired or auth context mismatch | Re-auth (`auth login` two-step) or reconnect with `auth connect --url ... --token ...`; verify target hub URL/token |
+| `NOT_FOUND` | Referenced monitor/resource/environment does not exist | Verify identifiers (`--monitor`, `--env`, integration/secret names) and retry |
+
+---
+
+## 3. Command overview
+
+Commands are either **top-level** or under a **group**. The default environment is `default` unless overridden with `--env <name>` where supported. **All commands support `--json`** (global flag) for a single JSON blob on stdout/stderr.
 
 | Area | Commands | Purpose |
 |------|----------|--------|
@@ -38,9 +117,9 @@ Commands are either **top-level** or under a **group**. The default environment 
 
 ---
 
-## 3. Core workflows
+## 4. Core workflows
 
-### 3.1 Project setup
+### 4.1 Project setup
 
 1. **Initialize** (once per project):
    ```bash
@@ -58,10 +137,10 @@ Commands are either **top-level** or under a **group**. The default environment 
    ```
 
 3. **Connect to hub** (for plan/apply/runs/run/metrics):
-   - **Griffin Cloud**: `griffin auth login` (device flow; token stored in `~/.griffin/credentials.json`).
-   - **Self‑hosted**: `griffin auth connect --url https://hub.example.com --token <api-key>`.
+   - **Griffin Cloud**: Use the two-step flow: `griffin --json auth login --no-poll` (get `authUrl`, have user authorize), then `griffin --json auth login --poll` (complete; token stored in `~/.griffin/credentials.json`). See section 2.3 above.
+   - **Self‑hosted**: `griffin auth connect --url https://hub.example.com --token <api-key>` (no browser).
 
-### 3.2 Local development and validation
+### 4.2 Local development and validation
 
 - **Validate** monitor files (no run, no hub):
   ```bash
@@ -79,7 +158,7 @@ Commands are either **top-level** or under a **group**. The default environment 
   griffin status
   ```
 
-### 3.3 Preview and deploy to hub
+### 4.3 Preview and deploy to hub
 
 - **Preview** what would be created/updated/deleted (exit code 2 if there are changes):
   ```bash
@@ -102,7 +181,7 @@ Commands are either **top-level** or under a **group**. The default environment 
   griffin destroy --env production --auto-approve
   ```
 
-### 3.4 Runs and metrics
+### 4.4 Runs and metrics
 
 - **List recent runs**:
   ```bash
@@ -123,7 +202,7 @@ Commands are either **top-level** or under a **group**. The default environment 
   griffin metrics --env production --period 7d --json
   ```
 
-### 3.5 Variables and secrets
+### 4.5 Variables and secrets
 
 Variables are stored in `.griffin/state.json` per environment and used when running monitors (e.g. for `variable("api-service")` in monitor DSL). Secrets are stored on the hub per environment and referenced in monitors via `secret("REF")`.
 
@@ -145,7 +224,7 @@ Variables are stored in `.griffin/state.json` per environment and used when runn
 
 ---
 
-## 4. File and config locations
+## 5. File and config locations
 
 - **State**: `.griffin/state.json` (project root). Holds `projectId`, `environments` (with optional `variables` per env), `hub`, `cloud`, and optional `discovery` (pattern/ignore). Do not commit if it contains local-only overrides; add `.griffin/` to `.gitignore` if desired.
 - **Credentials**: `~/.griffin/credentials.json` (user-level). Used by `auth login` and `auth connect --token`. Do not commit.
@@ -153,7 +232,7 @@ Variables are stored in `.griffin/state.json` per environment and used when runn
 
 ---
 
-## 5. Environment and defaults
+## 6. Environment and defaults
 
 - Most hub-related and run commands accept `--env <name>`. Default is `default`.
 - Set default env for the shell: `export GRIFFIN_ENV=production` (if the CLI respects it; otherwise pass `--env` explicitly).
@@ -161,12 +240,12 @@ Variables are stored in `.griffin/state.json` per environment and used when runn
 
 ---
 
-## 6. Checklist for common tasks
+## 7. Checklist for common tasks
 
 **First-time setup**
 - [ ] Run `griffin init` (and optionally `griffin env add` for extra environments).
 - [ ] Add variables with `griffin variables add KEY=value --env <env>` as needed for monitor `variable("...")` refs.
-- [ ] Use `griffin auth login` or `griffin auth connect` if you will use plan/apply/runs/run/metrics.
+- [ ] Use `griffin auth login` (two-step: `--no-poll` then user authorizes then `--poll`) or `griffin auth connect` if you will use plan/apply/runs/run/metrics.
 
 **Before deploying**
 - [ ] Run `griffin validate` to ensure monitor files are valid.
@@ -183,8 +262,9 @@ Variables are stored in `.griffin/state.json` per environment and used when runn
 
 ## Summary
 
-1. **Setup**: `griffin init`; optionally `env add`, `variables add`, and `auth login` or `auth connect`.
-2. **Local**: `griffin validate` and `griffin test --env <env>`.
-3. **Hub**: `griffin plan` to preview; `griffin apply` to sync; `griffin runs` / `griffin run` / `griffin metrics` to observe.
-4. **Config**: Variables in state via `griffin variables`; secrets on hub via `griffin secrets`; both are per-environment.
-5. Use `--env` consistently when targeting a non-default environment; use `griffin status` to verify project and connection.
+1. **Agents:** Follow the execution contract in section 2: use `--json`, parse stdout/stderr JSON envelopes, provide required bypass flags, and use auth two-step only (`--no-poll` then `--poll`).
+2. **Setup**: `griffin init`; optionally `env add`, `variables add`, and `auth login` (two-step) or `auth connect`.
+3. **Local**: `griffin validate` and `griffin test --env <env>`.
+4. **Hub**: `griffin plan` to preview; `griffin apply` to sync; `griffin runs` / `griffin run` / `griffin metrics` to observe.
+5. **Config**: Variables in state via `griffin variables`; secrets on hub via `griffin secrets`; both are per-environment.
+6. Use `--env` consistently when targeting a non-default environment; use `griffin status` to verify project and connection.
