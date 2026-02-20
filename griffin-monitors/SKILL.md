@@ -105,18 +105,23 @@ export default monitor;
 - **name**: Short, unique, descriptive (e.g. `health-check`, `orders-create-and-fetch`).
 - **frequency**: `Frequency.every(n).minute()`, `.minutes()`, `.hour()`, `.hours()`, `.day()`, `.days()`.
 - **locations** (optional): Array of location identifiers where the monitor runs (e.g. `["us-east-1", "eu-west-1"]`).
-- **request(id, config)**: `method` (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, etc.), `path`, `base`, `response_format`, optional `headers`, `body`. `config` may be a static object or a callback `(state) => config`. Both `headers` and `body` may contain `secret("...")` references.
+- **request(id, config)**: `method` (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, etc.), `path`, `base`, `response_format`, optional `headers`, `body`. `config` may be a static object or a callback `(state) => config`. `path` and `base` may use `variable("key")`, `template` (see [String templates](#string-templates)), or state refs in a callback. Both `headers` and `body` may contain `secret("...")` references.
+- **response_format**: `Json`, `Xml`, or `NoContent`. Use `NoContent` (import from `@griffin-app/griffin-core`) for endpoints that return **204 with no body**; assert only on `state["node"].status` (e.g. `.equals(204)`). Do not assert on body for NO_CONTENT.
 - **assert(callback)**: Callback receives `state`; use `state["step_name"]` to refer to a prior request. Return an array of `Assert(...)` results. **When an assertion fails, the monitor run fails and no later steps execute.**
 - **wait(id, duration)**: `WaitDuration.seconds(n)`, `WaitDuration.minutes(n)`, or a number (milliseconds, e.g. `2000`).
 
 ### Base URL and variables
 
 - **Base URL**: Use `variable("key")` for the base URL (e.g. `variable("api-service")`). The key is resolved per environment when the monitor is run.
-- **Variable with template**: For paths or strings that embed a variable, use `variable("key", "template")` where the template contains `${key}` (e.g. `path: variable("api-version", "/api/${api-version}/health")`).
+- **Combining multiple refs**: Use the **`template`** tagged template literal (see [String templates](#string-templates)), e.g. `` path: template`/api/${variable("api-version")}/health` ``. The two-argument `variable("key", "template")` form has been **removed**; use `template` for any string that combines variables, secrets, or state refs.
+
+### String templates
+
+Use the **`template`** tagged template literal when `path` or `base` (or any string field that accepts refs) must combine multiple variables, secrets, or node refs. Import `template` from `@griffin-app/griffin`. Each interpolation must be a `variable("key")`, `secret("REF")`, or a state proxy reference (e.g. `state["node"].body["id"]`). Example: `` path: template`/api/${variable("api-version")}/health` ``, `` base: template`https://${variable("env")}.api.example.com` ``. Only variable(), secret(), and state refs are allowed inside template; plain strings or numbers throw at build time.
 
 ### Secrets
 
-- Use `secret("REF")` in `headers` or `body` (e.g. `headers: { "Authorization": secret("API_TOKEN") }`, or `body: { apiKey: secret("API_KEY") }`). Optional: `secret("REF", { field: "key" })` for a field from a JSON secret; `secret("REF", { version: "x" })` to pin a version when the provider supports it.
+- Use `secret("REF")` in `headers` or `body` (e.g. `headers: { "Authorization": secret("API_TOKEN") }`, or `body: { apiKey: secret("API_KEY") }`). Use `template` in `path`/`base` when you need to mix secrets with variables or state refs. Optional: `secret("REF", { field: "key" })` for a field from a JSON secret; `secret("REF", { version: "x" })` to pin a version when the provider supports it.
 - **Secret refs must match** `^[A-Za-z_][A-Za-z0-9_]*$`: start with a letter or underscore, then only letters, numbers, and underscores. Use `API_TOKEN` or `my_api_key`, not `my-api-key` (hyphens are invalid).
 
 ---

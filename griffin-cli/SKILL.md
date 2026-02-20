@@ -94,7 +94,7 @@ griffin --json apply --env production --auto-approve
 | `INTERACTIVE_REQUIRED` | Command requires prompt input | Re-run with the required non-interactive bypass flag (`--auto-approve`, `--force`, `--value`, etc.) |
 | `NO_PENDING_AUTH` | Tried `auth login --poll` with no prior device flow | Run `griffin --json auth login --no-poll`, have the user complete browser auth, then run `griffin --json auth login --poll` |
 | `AUTH_FAILED` | Credentials invalid/expired or auth context mismatch | Re-auth (`auth login` two-step) or reconnect with `auth connect --url ... --token ...`; verify target hub URL/token |
-| `NOT_FOUND` | Referenced monitor/resource/environment does not exist | Verify identifiers (`--monitor`, `--env`, integration/secret names) and retry |
+| `NOT_FOUND` | Referenced monitor/resource/environment does not exist | Verify identifiers (`--monitor`, `--env`, integration/secret names) and retry. For missing monitor name, error details may include `available: string[]` listing valid monitor names. |
 
 ---
 
@@ -142,15 +142,17 @@ Commands are either **top-level** or under a **group**. The default environment 
 
 ### 4.2 Local development and validation
 
-- **Validate** monitor files (no run, no hub):
+- **Validate** monitor files (no run, no hub). Optional `--monitor <name>` validates only that monitor:
   ```bash
   griffin validate
+  griffin validate --monitor health-check
   ```
 
-- **Run monitors locally** against an environment (uses variables from state for that env):
+- **Run monitors locally** against an environment (uses variables from state for that env). Optional `--monitor <name>` runs only that monitor:
   ```bash
   griffin test
   griffin test --env staging
+  griffin test --env staging --monitor health-check
   ```
 
 - **Check status** (project, hub connection):
@@ -160,15 +162,17 @@ Commands are either **top-level** or under a **group**. The default environment 
 
 ### 4.3 Preview and deploy to hub
 
-- **Preview** what would be created/updated/deleted (exit code 2 if there are changes):
+- **Preview** what would be created/updated/deleted (exit code 2 if there are changes). Optional `--monitor <name>` plans only that monitor:
   ```bash
   griffin plan
   griffin plan --env production --json
+  griffin plan --env production --monitor health-check
   ```
 
-- **Apply** changes to the hub (creates/updates monitors; optionally prune):
+- **Apply** changes to the hub (creates/updates monitors; optionally prune). Optional `--monitor <name>` applies only that monitor:
   ```bash
   griffin apply --env production
+  griffin apply --env production --monitor health-check
   griffin apply --env production --auto-approve
   griffin apply --env production --dry-run
   griffin apply --env production --prune    # delete hub monitors not present locally

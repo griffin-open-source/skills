@@ -13,6 +13,8 @@ Use with `Assert(accessor).predicate()`. Return an array from the `.assert((stat
 
 **Status and latency** support only **binary** predicates (e.g. `.equals(200)`, `.lessThan(500)`). Do not use unary predicates (`.isNull()`, `.isDefined()`, `.isEmpty()`) on `status` or `latency`—they throw at build time. **Body and headers** support both unary and binary predicates.
 
+For steps with `response_format: NoContent` (204 with no body), assert only on `status` (e.g. `Assert(state["node"].status).equals(204)`); there is no body to assert on.
+
 **Array access:** use `.at(index)` for array elements, e.g. `state["node"].body["items"].at(0)["name"]` or `state["node"].body["matrix"].at(2).at(3)` for nested arrays.
 
 ---
