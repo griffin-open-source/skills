@@ -110,7 +110,7 @@ Commands are either **top-level** or under a **group**. The default environment 
 | **Hub runs** | `runs`, `run`, `metrics` | List runs, trigger run, view metrics |
 | **Auth** | `auth login`, `auth logout`, `auth connect`, `auth generate-key` | Cloud or self‑hosted auth |
 | **Environments** | `env list`, `env add`, `env remove` | Manage environments |
-| **Variables** | `variables list`, `variables add`, `variables remove` | Per-environment variables (in state) |
+| **Variables** | `variables list`, `variables add`, `variables remove`, `variables pull` | Per-environment variables in `griffin.variables.json` (project root) |
 | **Secrets** | `secrets list`, `secrets set`, `secrets get`, `secrets delete` | Per-environment secrets (stored on hub) |
 | **Integrations** | `integrations list`, `integrations show`, `integrations connect`, `integrations update`, `integrations remove` | Slack, email, webhooks, etc. |
 | **Notifications** | `notifications list`, `notifications test` | Notification rules and test sends |
@@ -126,12 +126,13 @@ Commands are either **top-level** or under a **group**. The default environment 
    griffin init
    griffin init --project my-service   # override project ID
    ```
-   Creates `.griffin/state.json` with project ID, default environment, and hub config. Add `.griffin/` to `.gitignore`.
+   Creates `.griffin/state.json` with project ID, default environment, and hub config. Add `.griffin/` to `.gitignore`. Variables live in `griffin.variables.json` at project root (checked in).
 
 2. **Optional: add environments and variables**
    ```bash
    griffin env add staging
    griffin env add production
+   griffin variables pull   # sync variable keys from monitors into griffin.variables.json
    griffin variables add API_BASE=https://staging.example.com --env staging
    griffin variables add API_BASE=https://api.example.com --env production
    ```
@@ -148,7 +149,7 @@ Commands are either **top-level** or under a **group**. The default environment 
   griffin validate --monitor health-check
   ```
 
-- **Run monitors locally** against an environment (uses variables from state for that env). Optional `--monitor <name>` runs only that monitor:
+- **Run monitors locally** against an environment (uses variables from `griffin.variables.json` for that env). Optional `--monitor <name>` runs only that monitor:
   ```bash
   griffin test
   griffin test --env staging
@@ -208,10 +209,11 @@ Commands are either **top-level** or under a **group**. The default environment 
 
 ### 4.5 Variables and secrets
 
-Variables are stored in `.griffin/state.json` per environment and used when running monitors (e.g. for `variable("api-service")` in monitor DSL). Secrets are stored on the hub per environment and referenced in monitors via `secret("REF")`.
+Variables are stored in `griffin.variables.json` at the project root, per environment, and are used when running monitors (e.g. for `variable("api-service")` in monitor DSL). The file is intended to be checked in. Secrets are stored on the hub per environment and referenced in monitors via `secret("REF")`.
 
-- **Variables** (in state; not sensitive):
+- **Variables** (`griffin.variables.json`; not sensitive):
   ```bash
+  griffin variables pull   # discover variable keys from monitors and add missing keys to the file
   griffin variables list --env default
   griffin variables add API_BASE=https://localhost:3000 --env default
   griffin variables remove API_BASE --env default
@@ -230,7 +232,8 @@ Variables are stored in `.griffin/state.json` per environment and used when runn
 
 ## 5. File and config locations
 
-- **State**: `.griffin/state.json` (project root). Holds `projectId`, `environments` (with optional `variables` per env), `hub`, `cloud`, and optional `discovery` (pattern/ignore). Do not commit if it contains local-only overrides; add `.griffin/` to `.gitignore` if desired.
+- **State**: `.griffin/state.json` (project root). Holds `projectId`, `environments`, `hub`, `cloud`, and optional `discovery` (pattern/ignore). Add `.griffin/` to `.gitignore` if desired.
+- **Variables**: `griffin.variables.json` (project root). Per-environment key-value pairs used by monitor `variable("key")` refs. Intended to be checked in.
 - **Credentials**: `~/.griffin/credentials.json` (user-level). Used by `auth login` and `auth connect --token`. Do not commit.
 - **Monitors**: Discovered from `__griffin__` directories; pattern is configurable in state under `discovery.pattern` (default `**/__griffin__/*.{ts,js}`), with `discovery.ignore` (e.g. `["node_modules/**", "dist/**"]`).
 
@@ -248,7 +251,7 @@ Variables are stored in `.griffin/state.json` per environment and used when runn
 
 **First-time setup**
 - [ ] Run `griffin init` (and optionally `griffin env add` for extra environments).
-- [ ] Add variables with `griffin variables add KEY=value --env <env>` as needed for monitor `variable("...")` refs.
+- [ ] Run `griffin variables pull` to sync variable keys from monitors; add or edit values with `griffin variables add KEY=value --env <env>` as needed.
 - [ ] Use `griffin auth login` (two-step: `--no-poll` then user authorizes then `--poll`) or `griffin auth connect` if you will use plan/apply/runs/run/metrics.
 
 **Before deploying**
@@ -270,5 +273,5 @@ Variables are stored in `.griffin/state.json` per environment and used when runn
 2. **Setup**: `griffin init`; optionally `env add`, `variables add`, and `auth login` (two-step) or `auth connect`.
 3. **Local**: `griffin validate` and `griffin test --env <env>`.
 4. **Hub**: `griffin plan` to preview; `griffin apply` to sync; `griffin runs` / `griffin run` / `griffin metrics` to observe.
-5. **Config**: Variables in state via `griffin variables`; secrets on hub via `griffin secrets`; both are per-environment.
+5. **Config**: Variables in `griffin.variables.json` via `griffin variables` (use `variables pull` to sync keys from monitors); secrets on hub via `griffin secrets`; both are per-environment.
 6. Use `--env` consistently when targeting a non-default environment; use `griffin status` to verify project and connection.

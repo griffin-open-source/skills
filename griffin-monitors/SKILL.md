@@ -112,7 +112,7 @@ export default monitor;
 
 ### Base URL and variables
 
-- **Base URL**: Use `variable("key")` for the base URL (e.g. `variable("api-service")`). The key is resolved per environment when the monitor is run.
+- **Base URL**: Use `variable("key")` for the base URL (e.g. `variable("api-service")`). The key is resolved per environment from the project's `griffin.variables.json` when the monitor is run.
 - **Combining multiple refs**: Use the **`template`** tagged template literal (see [String templates](#string-templates)), e.g. `` path: template`/api/${variable("api-version")}/health` ``. The two-argument `variable("key", "template")` form has been **removed**; use `template` for any string that combines variables, secrets, or state refs.
 
 ### String templates
