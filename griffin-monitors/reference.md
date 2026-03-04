@@ -2,7 +2,9 @@
 
 Use with `Assert(accessor).predicate()`. Return an array from the `.assert((state) => [ ... ])` callback.
 
-## Accessors
+## API Request Accessors
+
+Use these on nodes created with `.request()`:
 
 | Accessor   | Description          | Example                                 |
 | ---------- | -------------------- | --------------------------------------- |
@@ -16,6 +18,23 @@ Use with `Assert(accessor).predicate()`. Return an array from the `.assert((stat
 For steps with `response_format: NoContent` (204 with no body), assert only on `status` (e.g. `Assert(state["node"].status).equals(204)`); there is no body to assert on.
 
 **Array access:** use `.at(index)` for array elements, e.g. `state["node"].body["items"].at(0)["name"]` or `state["node"].body["matrix"].at(2).at(3)` for nested arrays.
+
+## Browser Accessors
+
+Use these on nodes created with `.browser()`. **Do not** mix browser and API accessors on the same node.
+
+| Accessor            | Description                             | Example                                           |
+| ------------------- | --------------------------------------- | ------------------------------------------------- |
+| `.page.url`         | Final page URL after navigation         | `state["node"].page.url`                          |
+| `.page.title`       | Page title                              | `state["node"].page.title`                        |
+| `.duration`         | Total browser step duration (ms)        | `state["node"].duration`                          |
+| `.console.errors`   | Array of JS console errors              | `state["node"].console.errors`                    |
+| `.extracts["name"]` | Text extracted by `extractText(name, selector)` | `state["node"].extracts["heading"]` |
+
+- **`.page.url`** and **`.page.title`** support both unary and binary predicates.
+- **`.duration`** supports only binary predicates (`.lessThan()`, `.greaterThan()`, `.equals()`, etc.).
+- **`.console.errors`** is typically checked with `.isEmpty()` (unary) to verify no JS errors.
+- **`.extracts["name"]`** supports both unary and binary predicates.
 
 ---
 
@@ -56,6 +75,8 @@ Negated comparison: e.g. `.not.greaterThan(100)` → value ≤ 100; `.not.lessTh
 
 ## Common patterns
 
+### API request patterns
+
 | Task              | Code                                                     |
 | ----------------- | -------------------------------------------------------- |
 | Status is 200     | `Assert(state["n"].status).equals(200)`                  |
@@ -69,6 +90,19 @@ Negated comparison: e.g. `.not.greaterThan(100)` → value ≤ 100; `.not.lessTh
 | Array not empty   | `Assert(state["n"].body["items"]).not.isEmpty()`        |
 | First array item  | `Assert(state["n"].body["items"].at(0)["id"]).isDefined()` |
 | Nested path       | `Assert(state["n"].body["user"]["profile"]["email"])...` |
+
+### Browser patterns
+
+| Task                | Code                                                        |
+| ------------------- | ----------------------------------------------------------- |
+| URL after redirect  | `Assert(state["n"].page.url).contains("/dashboard")`        |
+| Page title          | `Assert(state["n"].page.title).equals("Dashboard")`         |
+| No JS errors        | `Assert(state["n"].console.errors).isEmpty()`               |
+| Duration < 5s       | `Assert(state["n"].duration).lessThan(5000)`                |
+| Extracted text      | `Assert(state["n"].extracts["heading"]).equals("Welcome")`  |
+| Text contains       | `Assert(state["n"].extracts["price"]).contains("$")`        |
+| Text not empty      | `Assert(state["n"].extracts["status"]).not.isEmpty()`       |
+| Text not error      | `Assert(state["n"].extracts["msg"]).not.contains("error")`  |
 
 ### Status checks
 
@@ -97,3 +131,21 @@ Assert(state["node"].body["items"].at(0)["name"]).equals("First");
 ```
 
 Use `.not` before any predicate to negate (e.g. `Assert(x).not.equals(500)`).
+
+### Browser checks
+
+```typescript
+// Page URL and title after navigation
+Assert(state["login"].page.url).contains("/dashboard");
+Assert(state["login"].page.title).not.isEmpty();
+
+// No JavaScript errors on page
+Assert(state["page"].console.errors).isEmpty();
+
+// Duration under threshold
+Assert(state["page"].duration).lessThan(5000);
+
+// Extracted text values
+Assert(state["page"].extracts["heading"]).equals("Welcome back");
+Assert(state["page"].extracts["count"]).not.equals("0");
+```
